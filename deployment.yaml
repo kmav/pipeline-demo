@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: pipeline-demo
-          image: pipeline-demo:IMAGE_TAG_PLACEHOLDER
+          image: trainingacrkmav.azurecr.io/pipeline-demo:3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
