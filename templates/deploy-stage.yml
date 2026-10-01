@@ -1,0 +1,69 @@
+parameters:
+- name: env
+  type: string
+- name: sku
+  type: string
+  default: 'F1'
+- name: dependsOn
+  type: object
+  default: []
+
+stages:
+- stage: Deploy_${{ parameters.env }}
+  displayName: 'Deploy ${{ parameters.env }}'
+  dependsOn: ${{ parameters.dependsOn }}
+  jobs:
+  - deployment: deploy
+    environment: ${{ parameters.env }}     # approvals/checks are configured on the environment
+    strategy:
+      runOnce:
+        deploy:
+          steps:                            # artifacts auto-download to $(Pipeline.Workspace)/<name>
+          - task: AzureCLI@2
+            displayName: 'Terraform init, plan, apply'
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: bash
+              scriptLocation: inlineScript
+              addSpnToEnvironment: true          # exposes the service connection identity to the script
+              workingDirectory: $(Pipeline.Workspace)/infra
+              inlineScript: |
+                set -e
+                # Terraform authenticates as the service connection
+                export ARM_CLIENT_ID=$servicePrincipalId
+                export ARM_TENANT_ID=$tenantId
+                if [ -n "$idToken" ]; then             # workload identity federation (OIDC)
+                  export ARM_OIDC_TOKEN=$idToken
+                  export ARM_USE_OIDC=true
+                else                                    # service principal with a secret
+                  export ARM_CLIENT_SECRET=$servicePrincipalKey
+                fi
+                export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                # key for the remote state storage account
+                export ARM_ACCESS_KEY=$(az storage account keys list -g $(tfStateRg) -n $(tfStateAccount) --query [0].value -o tsv)
+
+                terraform version
+                terraform init -input=false \
+                  -backend-config="resource_group_name=$(tfStateRg)" \
+                  -backend-config="storage_account_name=$(tfStateAccount)" \
+                  -backend-config="container_name=tfstate" \
+                  -backend-config="key=cfdemo-${{ parameters.env }}.tfstate"
+                terraform plan -input=false -out=tfplan \
+                  -var="env=${{ parameters.env }}" -var="sku=${{ parameters.sku }}"
+                terraform apply -input=false tfplan
+
+                APP=`terraform output -raw app_name`
+                echo "##vso[task.setvariable variable=appName]$APP"
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy app'
+            inputs:
+              azureSubscription: $(azureSubscription)
+              appType: webAppLinux
+              appName: $(appName)
+              package: $(Pipeline.Workspace)/app/app.zip
+
+          - script: |
+              sleep 30
+              curl -fsS https://$(appName).azurewebsites.net/health
+            displayName: 'Smoke test'

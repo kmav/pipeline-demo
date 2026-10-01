@@ -1,0 +1,96 @@
+- name: Configure CloudFin demo VM
+  hosts: web
+  become: true
+  gather_facts: false
+  vars:
+    app_dir: /opt/cfdemo
+    app_env: vm
+  tasks:
+    - name: Wait until the new VM accepts SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Install packages
+      ansible.builtin.apt:
+        name: [python3-venv, nginx]
+        update_cache: true
+
+    - name: Create app user
+      ansible.builtin.user:
+        name: cfdemo
+        system: true
+        shell: /usr/sbin/nologin
+
+    - name: Create app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: cfdemo
+
+    - name: Copy application code
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../src/"
+        dest: "{{ app_dir }}/"
+        owner: cfdemo
+      notify: Restart app
+
+    - name: Install Python dependencies in a virtualenv
+      ansible.builtin.pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/venv"
+        virtualenv_command: python3 -m venv
+      notify: Restart app
+
+    - name: systemd unit for the app
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cfdemo.service
+        content: |
+          [Unit]
+          Description=CloudFin demo app
+          After=network.target
+
+          [Service]
+          User=cfdemo
+          WorkingDirectory={{ app_dir }}
+          Environment=APP_ENV={{ app_env }}
+          ExecStart={{ app_dir }}/venv/bin/gunicorn --bind 127.0.0.1:8000 app:app
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart app
+
+    - name: nginx as reverse proxy
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/default
+        content: |
+          server {
+            listen 80 default_server;
+            location / {
+              proxy_pass http://127.0.0.1:8000;
+              proxy_set_header Host $host;
+            }
+          }
+      notify: Reload nginx
+
+    - name: Enable and start the app
+      ansible.builtin.systemd:
+        name: cfdemo
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart app
+      ansible.builtin.systemd:
+        name: cfdemo
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

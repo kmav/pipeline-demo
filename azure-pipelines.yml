@@ -1,19 +1,54 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include: [ main ]
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: ubuntu-latest        # self-hosted: name: Default
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  azureSubscription: 'sc-azure-demo'
+  pythonVersion: '3.12'
+  tfStateRg: 'rg-tfstate'
+  tfStateAccount: 'sttfstatekmav01'   # your storage account name from 2.4a
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+stages:
+- stage: Build
+  jobs:
+  - job: build_test
+    steps:
+    - task: UsePythonVersion@0          # remove on self-hosted agent
+      inputs:
+        versionSpec: '$(pythonVersion)'
+
+    - script: |
+        python -m venv .venv && . .venv/bin/activate
+        pip install -r src/requirements.txt pytest
+        PYTHONPATH=src pytest --junitxml=test-results.xml
+      displayName: 'Install & unit test'
+
+    - task: PublishTestResults@2
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFiles: 'test-results.xml'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: 'src'
+        includeRootFolder: false
+        archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+
+    - publish: '$(Build.ArtifactStagingDirectory)/app.zip'
+      artifact: app
+    - publish: infra              # the Terraform files
+      artifact: infra
+
+- template: templates/deploy-stage.yml
+  parameters:
+    env: dev
+    dependsOn: [ Build ]
+
+- template: templates/deploy-stage.yml
+  parameters:
+    env: prod
+    sku: 'B1'            # or F1 if quota allows
+    dependsOn: [ Deploy_dev ]

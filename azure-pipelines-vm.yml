@@ -1,0 +1,56 @@
+trigger: none          # run it manually from Azure DevOps
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'sc-azure-demo'
+  tfStateRg: 'rg-tfstate'
+  tfStateAccount: 'sttfstatekmav01'
+
+steps:
+- task: AzureCLI@2
+  displayName: 'Terraform: create VM'
+  inputs:
+    azureSubscription: $(azureSubscription)
+    scriptType: bash
+    scriptLocation: inlineScript
+    addSpnToEnvironment: true
+    workingDirectory: infra-vm
+    inlineScript: |
+      set -e
+      export ARM_CLIENT_ID=$servicePrincipalId
+      export ARM_TENANT_ID=$tenantId
+      if [ -n "$idToken" ]; then             # workload identity federation (OIDC)
+        export ARM_OIDC_TOKEN=$idToken
+        export ARM_USE_OIDC=true
+      else                                    # service principal with a secret
+        export ARM_CLIENT_SECRET=$servicePrincipalKey
+      fi
+      export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+      export ARM_ACCESS_KEY=$(az storage account keys list -g $(tfStateRg) -n $(tfStateAccount) --query [0].value -o tsv)
+      terraform init -input=false \
+        -backend-config="resource_group_name=$(tfStateRg)" \
+        -backend-config="storage_account_name=$(tfStateAccount)" \
+        -backend-config="container_name=tfstate" \
+        -backend-config="key=cfdemo-vm.tfstate"
+      terraform apply -input=false -auto-approve
+      IP=`terraform output -raw public_ip`
+      echo "##vso[task.setvariable variable=vmIp]$IP"
+
+- task: DownloadSecureFile@1
+  name: sshKey
+  displayName: 'Get SSH private key'
+  inputs:
+    secureFile: 'cfdemo_id_ed25519'
+
+- script: |
+    set -e
+    chmod 600 $(sshKey.secureFilePath)
+    python3 -m venv /tmp/ansible && /tmp/ansible/bin/pip install -q ansible-core
+    export PATH=/tmp/ansible/bin:$PATH
+    printf "[web]\n%s ansible_user=azureuser\n" "$(vmIp)" > inventory.ini
+    export ANSIBLE_HOST_KEY_CHECKING=False     # demo only: brand-new VM, unknown host key
+    ansible-playbook -i inventory.ini --private-key $(sshKey.secureFilePath) ansible/site.yml
+    curl -fsS http://$(vmIp)/health
+  displayName: 'Ansible: configure VM + smoke test'
