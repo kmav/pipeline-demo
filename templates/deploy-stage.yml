@@ -19,6 +19,14 @@ stages:
       runOnce:
         deploy:
           steps:                            # artifacts auto-download to $(Pipeline.Workspace)/<name>
+          - script: |
+              set -e
+              TF_VERSION=1.9.8
+              curl -fsSLo /tmp/tf.zip https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+              sudo unzip -o /tmp/tf.zip -d /usr/local/bin
+              terraform version
+            displayName: 'Install Terraform'
+
           - task: AzureCLI@2
             displayName: 'Terraform init, plan, apply'
             inputs:

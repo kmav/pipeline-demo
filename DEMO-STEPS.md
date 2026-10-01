@@ -15,17 +15,20 @@
    The pipelines work with either connection type.
 3. Create the Terraform state storage (once):
    az login
-   az group create -n rg-tfstate -l westeurope
-   az storage account create -n sttfstatekmav01 -g rg-tfstate -l westeurope --sku Standard_LRS --min-tls-version TLS1_2 --allow-blob-public-access false
+   az group create -n rg-tfstate -l northeurope
+   az storage account create -n sttfstatekmav01 -g rg-tfstate -l northeurope --sku Standard_LRS --min-tls-version TLS1_2 --allow-blob-public-access false
    az storage container create -n tfstate --account-name sttfstatekmav01 --auth-mode key
    (If the name is taken, choose another and change tfStateAccount in azure-pipelines.yml.)
    The service connection needs to read the storage keys: it has Contributor on the subscription, which is enough.
+3b. Create the environments (Azure DevOps doesn't always auto-create them; otherwise: "Environment dev could not be found"):
+   DevOps-Training → Pipelines → Environments → New environment → name dev, Resource: None → Create. Same for prod.
+   On prod: ⋯ → Approvals and checks → + → Approvals → add yourself → Create.
 4. Push:
    git add . && git commit -m "Demo: Flask app, Terraform App Service, multi-stage pipeline"
    git pull github main --no-rebase
    git push github main
 5. In Azure DevOps the pipeline runs: Build → Deploy_dev → Deploy_prod. Click "Permit" if asked.
-6. After the first run: Pipelines → Environments → prod → Approvals and checks → Approvals → add yourself. Run again.
+6. If a run fails before starting (e.g. missing environment), don't use "Rerun" (you get "No plan found for identifier ..."); start a NEW run: Pipelines → your pipeline → Run pipeline → Run.
 
 # Optional stretch: rehost path (Azure VM with Terraform + Ansible)
 Only after the main pipeline works. Files: infra-vm/, ansible/, azure-pipelines-vm.yml

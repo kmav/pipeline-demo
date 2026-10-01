@@ -1,0 +1,7 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+.venv/
+__pycache__/
+cfdemo_id_ed25519
