@@ -5,7 +5,7 @@ variable "env" {
 
 variable "location" {
   type    = string
-  default = "northeurope"
+  default = "swedencentral"
 }
 
 variable "sku" {

@@ -14,7 +14,7 @@ provider "azurerm" {
 
 variable "location" {
   type    = string
-  default = "northeurope"
+  default = "swedencentral"
 }
 
 variable "admin_cidr" {

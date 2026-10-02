@@ -30,6 +30,14 @@
 5. In Azure DevOps the pipeline runs: Build → Deploy_dev → Deploy_prod. Click "Permit" if asked.
 6. If a run fails before starting (e.g. missing environment), don't use "Rerun" (you get "No plan found for identifier ..."); start a NEW run: Pipelines → your pipeline → Run pipeline → Run.
 
+# If Terraform fails with "401 Unauthorized ... Operation cannot be completed without additional quota ... (F1 VMs): 0"
+It is NOT a permission problem: the subscription has no App Service quota in that region for that size.
+1. Find a region/size that works:  bash scripts/check-appservice-quota.sh   (takes a few minutes)
+2. In azure-pipelines.yml set   location: '<region that printed OK>'   and the sku of dev/prod to a size that printed OK.
+   (Each environment needs its own plan; if only one F1 is allowed per region, use B1 for prod or another region.)
+3. Commit + push → new run.
+Alternative: Azure portal → Quotas → App Service → request an increase (can take hours/days).
+
 # Optional stretch: rehost path (Azure VM with Terraform + Ansible)
 Only after the main pipeline works. Files: infra-vm/, ansible/, azure-pipelines-vm.yml
 

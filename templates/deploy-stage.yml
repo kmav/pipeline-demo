@@ -57,7 +57,7 @@ stages:
                   -backend-config="container_name=tfstate" \
                   -backend-config="key=cfdemo-${{ parameters.env }}.tfstate"
                 terraform plan -input=false -out=tfplan \
-                  -var="env=${{ parameters.env }}" -var="sku=${{ parameters.sku }}"
+                  -var="env=${{ parameters.env }}" -var="sku=${{ parameters.sku }}" -var="location=$(location)"
                 terraform apply -input=false tfplan
 
                 APP=`terraform output -raw app_name`

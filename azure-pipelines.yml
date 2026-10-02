@@ -10,6 +10,7 @@ variables:
   pythonVersion: '3.12'
   tfStateRg: 'rg-tfstate'
   tfStateAccount: 'sttfstatekmav01'   # your storage account name from 2.4a
+  location: 'swedencentral'            # Azure region for the app (change if quota/region errors)
 
 stages:
 - stage: Build
