@@ -72,6 +72,8 @@ stages:
               package: $(Pipeline.Workspace)/app/app.zip
 
           - script: |
-              sleep 30
-              curl -fsS https://$(appName).azurewebsites.net/health
+              # retry for up to ~5 minutes; each attempt times out after 30s (first start can be slow)
+              curl -fsS --max-time 30 --retry 10 --retry-delay 20 --retry-all-errors \
+                https://$(appName).azurewebsites.net/health
             displayName: 'Smoke test'
+            timeoutInMinutes: 10
